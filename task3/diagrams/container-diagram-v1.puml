@@ -1,0 +1,39 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма контейнеров - Вариант №1: Оркестрация внутри Payment Service
+
+Person(user, "Клиент / Пользователь", "Инициирует платёж")
+
+System_Boundary(platform, "Платёжная платформа OrchestrPay") {
+
+    Container(api_gateway, "API Gateway", "Kong / Nginx", "Принимает внешние запросы от пользователей и маршрутизирует их к внутренним сервисам")
+
+    Container(payment_service, "Payment Service", "Java / Spring Boot + Camunda BPMN", "Основной сервис обработки платежей. Содержит движок оркестрации Camunda, управляет жизненным циклом платежа, выполняет Saga-шаги и компенсационные транзакции.")
+
+    Container(fraud_service, "FraudCheck Service", "Go / Python", "Выполняет антифрод-проверки, возвращает решение: разрешить, запретить, либо отправить на ручную проверку.")
+
+    Container(notification_service, "Notification Service", "Java / Kotlin", "Отправляет клиентам уведомления (email, push) о статусах операций.")
+
+    ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Хранит данные платёжных транзакций, а также состояния процессов Camunda (Saga state).")
+
+    ContainerDb(fraud_db, "FraudCheck DB", "PostgreSQL", "Хранит правила, метки и логи антифрод-проверок.")
+
+    ContainerDb(redis_cache, "Кэш лимитов и статусов", "Redis", "Высокодоступное кэширование лимитов, фрод-меток и промежуточных статусов для обеспечения SLA.")
+}
+
+System_Ext(ext_gateway, "Внешний Платёжный Шлюз", "Осуществляет реальное списание и зачисление средств в банках-эквайерах")
+
+Rel(user, api_gateway, "Инициирует платёж", "HTTPS")
+Rel(api_gateway, payment_service, "Маршрутизация запроса /api/payments", "JSON/HTTPS")
+
+Rel(payment_service, payment_db, "Чтение/Запись состояний", "SQL/TCP")
+Rel(payment_service, redis_cache, "Проверка лимитов и дублей", "RESP/TCP")
+Rel(payment_service, fraud_service, "Запуск FraudCheck", "gRPC/HTTPS")
+Rel(fraud_service, fraud_db, "Логирование проверок", "SQL/TCP")
+Rel(payment_service, notification_service, "Запрос на отправку уведомления", "Async/HTTPS")
+Rel(payment_service, ext_gateway, "Списание/Зачисление/Возврат средств", "ISO 8583 / HTTPS")
+
+@enduml

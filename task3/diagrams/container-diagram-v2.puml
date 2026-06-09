@@ -1,0 +1,51 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма контейнеров - Вариант №2: Выделенный сервис-оркестратор
+
+Person(user, "Клиент / Пользователь", "Инициирует платёж")
+
+System_Boundary(platform, "Платёжная платформа OrchestrPay") {
+
+    Container(api_gateway, "API Gateway", "Kong / Nginx", "Точка входа для всех внешних запросов")
+
+    Container(payment_orchestrator, "Payment Orchestrator", "Java / Camunda BPMN", "Сервис-оркестратор. Координирует выполнение Saga, управляет состояниями и таймерами, вызывает доменные сервисы согласно BPMN-схеме.")
+
+    Container(payment_service, "Payment Service", "Java / Spring Boot", "Доменный сервис платёжных операций. Предоставляет атомарные API: холдирование средств (reserve), зачисление (capture), возврат холда (release), рефанд (refund).")
+
+    Container(fraud_service, "FraudCheck Service", "Go / Python", "Выполняет антифрод-проверки: автоматические и ручные.")
+
+    Container(notification_service, "Notification Service", "Java / Kotlin", "Отправляет уведомления клиентам.")
+
+    ContainerDb(orchestrator_db, "Orchestrator DB", "PostgreSQL", "Хранит исключительно состояние Saga-процессов и шагов оркестрации.")
+
+    ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Хранит данные платёжных инструкций и операций (счета, суммы, статусы проводок).")
+
+    ContainerDb(fraud_db, "FraudCheck DB", "PostgreSQL", "Хранит логи и правила антифрод-проверок.")
+
+    ContainerDb(redis_cache, "Кэш и статусы", "Redis", "Кэширование результатов проверок, лимитов и промежуточного состояния для ускорения.")
+}
+
+System_Ext(ext_gateway, "Внешний Платёжный Шлюз", "Обрабатывает реальные банковские проводки")
+
+Rel(user, api_gateway, "Инициирует платёж", "HTTPS")
+Rel(api_gateway, payment_orchestrator, "Запуск сценария платежа", "JSON/HTTPS")
+
+' Вызовы оркестратора к доменным сервисам
+Rel(payment_orchestrator, payment_service, "Вызовы: /reserve, /capture, /release, /refund", "gRPC/HTTPS")
+Rel(payment_orchestrator, fraud_service, "Вызов: /check", "gRPC/HTTPS")
+Rel(payment_orchestrator, notification_service, "Вызов: /send", "Async/HTTPS")
+
+' Связи с БД
+Rel(payment_orchestrator, orchestrator_db, "Чтение/Запись состояния Saga", "SQL/TCP")
+Rel(payment_service, payment_db, "Чтение/Запись финансовых данных", "SQL/TCP")
+Rel(fraud_service, fraud_db, "Логирование проверок", "SQL/TCP")
+
+' Инфраструктурные связи
+Rel(payment_orchestrator, redis_cache, "Управление статусами ожидания и таймаутами", "RESP/TCP")
+Rel(payment_service, ext_gateway, "Взаимодействие с банками", "ISO 8583 / HTTPS")
+Rel(payment_service, redis_cache, "Проверка дубликатов и лимитов", "RESP/TCP")
+
+@enduml
