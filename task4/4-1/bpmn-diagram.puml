@@ -1,0 +1,73 @@
+@startuml
+title BPMN Диаграмма обработки платежа OrchestrPay\nSaga-оркестрация с компенсациями
+
+|Payment Orchestrator|
+start
+
+:Создание платежа\n(Create Payment)\nЗапись в БД, статус PENDING;
+
+:Резервирование средств\n(Reserve Funds)\nХолдирование на счете клиента;
+
+:Запуск антифрод-проверки\n(FraudCheck)\nАвтоматический анализ;
+
+if (Результат\nпроверки?) then (<color:green>Одобрено)
+  
+  :Подготовка к исполнению\nСтатус AUTHORIZED;
+  
+elseif (<color:orange>Ручная проверка) then
+  
+  :Отправка на ручную проверку\n(Manual Review)\nСтатус PENDING_MANUAL_REVIEW;
+  
+  |FraudCheck Service|
+  :Ожидание решения оператора\nТаймер: 20 минут;
+  
+  if (Решение получено\nза 20 мин?) then (Да)
+    if (Вердикт\nоператора?) then (<color:green>Одобрено)
+      |Payment Orchestrator|
+      :Подтверждение транзакции\nСтатус AUTHORIZED;
+    else (<color:red>Отклонено)
+      |Payment Orchestrator|
+      :Отмена транзакции\nСтатус DECLINED;
+      :Компенсация: Возврат холда\n(Release Funds);
+      :Уведомление клиента\nПлатёж отклонён;
+      stop
+    endif
+  else (Нет, таймаут)
+    |Payment Orchestrator|
+    note right: Cut-off time (20 мин)\nПравило: default allow
+    :Автоматическое одобрение\nпо таймауту;
+  endif
+  
+else (<color:red>Отклонено)
+  
+  :Отмена транзакции\nСтатус DECLINED;
+  :Компенсация: Возврат холда\n(Release Funds);
+  :Уведомление клиента\nПлатёж отклонён;
+  stop
+  
+endif
+
+:Исполнение платежа\n(Execute Payment)\nПеревод средств контрагенту\n<color:red>PIVOT POINT;
+
+if (Перевод\nуспешен?) then (Да)
+  
+  :Финализация платежа\nСтатус SETTLED;
+  :Уведомление клиента\nПлатёж успешен;
+  stop
+  
+else (Нет, ошибка)
+  
+  :Обработка сбоя\nСтатус FAILED;
+  
+  if (Средства уже\nпереведены?) then (Да)
+    :Компенсация: Полный возврат\n(Refund Payment);
+  else (Нет)
+    :Компенсация: Возврат холда\n(Release Funds);
+  endif
+  
+  :Уведомление клиента\nОшибка платежа, возврат;
+  stop
+  
+endif
+
+@enduml
