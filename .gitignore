@@ -1,28 +1,75 @@
-.idea/
-*.iws
-*.iml
-*.ipr
-out/
-!**/src/main/resources/
-!**/src/test/resources/
-
-### Gradle ###
-.gradle/
+# === Compiled files ===
+*.class
+*.jar
+*.war
+*.ear
+target/
 build/
-!gradle/wrapper/gradle-wrapper.jar
 
-### Kotlin ###
-.kotlin/
-kotlin-js-store/
+# === IDE ===
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+*~
 
-### Log files ###
-*.log
-logs/
-
-### OS files ###
+# === OS ===
 .DS_Store
 Thumbs.db
+*.bak
 
-### Корневые конфигурации среды (переменные окружения) ###
+# === Gradle ===
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.properties
+gradlew.bat
+!gradlew
+out/
+
+# === Maven ===
+.mvn/
+mvnw
+mvnw.cmd
+
+# === Spring Boot ===
+application-local.yml
+application-dev.yml
+application-prod.yml
+
+# === Environment ===
 .env
 .env.local
+.env.*.local
+
+# === Logs ===
+logs/
+*.log
+
+# === Docker ===
+docker-compose.override.yml
+
+# === Test ===
+test-output/
+*.test
+
+# === Database ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === Camunda/Zeebe ===
+zeebe-data/
+elastic/
+
+# === Temporary files ===
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_1"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+
+  <bpmn:process id="payment-process" name="Payment Process" isExecutable="true">
+
+    <!-- Start Event -->
+    <bpmn:startEvent id="StartEvent" name="Payment Initiated">
+      <bpmn:outgoing>Flow_to_CreatePayment</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- Create Payment -->
+    <bpmn:serviceTask id="CreatePayment" name="Create Payment">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="create-payment"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_CreatePayment</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_ReserveFunds</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Reserve Funds -->
+    <bpmn:serviceTask id="ReserveFunds" name="Reserve Funds">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="reserve-funds"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_ReserveFunds</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_FraudCheck</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Fraud Check -->
+    <bpmn:serviceTask id="FraudCheck" name="Fraud Check">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="fraud-check"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_FraudCheck</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_CheckResult</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Gateway: Check Result -->
+    <bpmn:exclusiveGateway id="Gateway_CheckResult" name="Fraud Result?">
+      <bpmn:incoming>Flow_to_CheckResult</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ManualReview</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Declined</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_Approved" name="Approved" sourceRef="Gateway_CheckResult" targetRef="ExecutePayment">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudResult = "approved"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ManualReview" name="Manual Review" sourceRef="Gateway_CheckResult" targetRef="ManualReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudResult = "manual_review"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_Declined" name="Declined" sourceRef="Gateway_CheckResult" targetRef="ReleaseFunds">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudResult = "declined"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Manual Review -->
+    <bpmn:serviceTask id="ManualReview" name="Manual Review">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="manual-review"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ManualReview</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_ManualResult</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Gateway: Manual Result -->
+    <bpmn:exclusiveGateway id="Gateway_ManualResult" name="Review Result?">
+      <bpmn:incoming>Flow_to_ManualResult</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualApproved</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ManualDeclined</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_ManualApproved" name="Approved" sourceRef="Gateway_ManualResult" targetRef="ExecutePayment">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=manualReviewResult = "approved"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ManualDeclined" name="Declined" sourceRef="Gateway_ManualResult" targetRef="ReleaseFunds">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=manualReviewResult = "declined"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Execute Payment (Pivot Point) -->
+    <bpmn:serviceTask id="ExecutePayment" name="Execute Payment">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="execute-payment"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Approved</bpmn:incoming>
+      <bpmn:incoming>Flow_ManualApproved</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_Gateway_AfterExecute</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Gateway: After Execute (Pivot Point Check) -->
+    <bpmn:exclusiveGateway id="Gateway_AfterExecute" name="Execute Success?">
+      <bpmn:incoming>Flow_to_Gateway_AfterExecute</bpmn:incoming>
+      <bpmn:outgoing>Flow_ExecuteSuccess</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ExecuteFailed</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_ExecuteSuccess" name="Success" sourceRef="Gateway_AfterExecute" targetRef="FinalizePayment">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=paymentStatus = "EXECUTED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ExecuteFailed" name="Failed" sourceRef="Gateway_AfterExecute" targetRef="RefundPayment">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=paymentStatus = "FAILED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Finalize Payment -->
+    <bpmn:serviceTask id="FinalizePayment" name="Finalize Payment">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="finalize-payment"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ExecuteSuccess</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_SuccessNotify</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Success Notification -->
+    <bpmn:serviceTask id="SuccessNotification" name="Notify Success">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-notification"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_SuccessNotify</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_SuccessEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Release Funds (Compensation: возврат холда до перевода) -->
+    <bpmn:serviceTask id="ReleaseFunds" name="Release Funds">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="release-funds"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Declined</bpmn:incoming>
+      <bpmn:incoming>Flow_ManualDeclined</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_FailNotify</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Refund Payment (Compensation: возврат денег после перевода) -->
+    <bpmn:serviceTask id="RefundPayment" name="Refund Payment">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="refund-payment"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ExecuteFailed</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_FailNotify_AfterRefund</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Failure Notification (после Release) -->
+    <bpmn:serviceTask id="FailNotification" name="Notify Failure">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-notification"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_FailNotify</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_FailEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Failure Notification (после Refund) -->
+    <bpmn:serviceTask id="FailNotificationAfterRefund" name="Notify Failure">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-notification"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_to_FailNotify_AfterRefund</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_FailEnd_AfterRefund</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- End Events -->
+    <bpmn:endEvent id="EndEvent_Success" name="Success">
+      <bpmn:incoming>Flow_to_SuccessEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="EndEvent_Fail" name="Failed (Release)">
+      <bpmn:incoming>Flow_to_FailEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="EndEvent_Fail_Refund" name="Failed (Refund)">
+      <bpmn:incoming>Flow_to_FailEnd_AfterRefund</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Flows -->
+    <bpmn:sequenceFlow id="Flow_to_CreatePayment" sourceRef="StartEvent" targetRef="CreatePayment"/>
+    <bpmn:sequenceFlow id="Flow_to_ReserveFunds" sourceRef="CreatePayment" targetRef="ReserveFunds"/>
+    <bpmn:sequenceFlow id="Flow_to_FraudCheck" sourceRef="ReserveFunds" targetRef="FraudCheck"/>
+    <bpmn:sequenceFlow id="Flow_to_CheckResult" sourceRef="FraudCheck" targetRef="Gateway_CheckResult"/>
+    <bpmn:sequenceFlow id="Flow_to_ManualResult" sourceRef="ManualReview" targetRef="Gateway_ManualResult"/>
+    <bpmn:sequenceFlow id="Flow_to_Gateway_AfterExecute" sourceRef="ExecutePayment" targetRef="Gateway_AfterExecute"/>
+    <bpmn:sequenceFlow id="Flow_to_Finalize" sourceRef="ExecutePayment" targetRef="FinalizePayment"/>
+    <bpmn:sequenceFlow id="Flow_to_SuccessNotify" sourceRef="FinalizePayment" targetRef="SuccessNotification"/>
+    <bpmn:sequenceFlow id="Flow_to_SuccessEnd" sourceRef="SuccessNotification" targetRef="EndEvent_Success"/>
+    <bpmn:sequenceFlow id="Flow_to_FailNotify" sourceRef="ReleaseFunds" targetRef="FailNotification"/>
+    <bpmn:sequenceFlow id="Flow_to_FailEnd" sourceRef="FailNotification" targetRef="EndEvent_Fail"/>
+    <bpmn:sequenceFlow id="Flow_to_FailNotify_AfterRefund" sourceRef="RefundPayment" targetRef="FailNotificationAfterRefund"/>
+    <bpmn:sequenceFlow id="Flow_to_FailEnd_AfterRefund" sourceRef="FailNotificationAfterRefund" targetRef="EndEvent_Fail_Refund"/>
+
+  </bpmn:process>
+</bpmn:definitions>
